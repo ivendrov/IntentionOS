@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intention Check - Intention OS</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+
+    <h1>This URL doesn't seem aligned with your intention</h1>
+
+    <div class="info">
+      <div class="info-row">
+        <span class="label">URL:</span>
+        <span class="value" id="blocked-url"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Intention:</span>
+        <span class="value" id="intention-text"></span>
+      </div>
+    </div>
+
+    <div class="override-section">
+      <p>To continue anyway, type:</p>
+      <p class="phrase">"<span id="break-glass-phrase">I am choosing distraction</span>"</p>
+
+      <input
+        type="text"
+        id="phrase-input"
+        placeholder="Type the phrase above..."
+        autocomplete="off"
+      />
+
+      <button id="continue-btn" disabled>Continue to site</button>
+
+      <label class="remember-checkbox">
+        <input type="checkbox" id="remember-checkbox" />
+        <span>Remember: this URL is okay for similar intentions</span>
+      </label>
+    </div>
+
+    <button id="end-intention-btn" class="secondary">End intention and start a new one</button>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>
