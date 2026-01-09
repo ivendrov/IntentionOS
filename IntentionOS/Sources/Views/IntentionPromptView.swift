@@ -242,11 +242,11 @@ struct IntentionPromptView: View {
 
     private var enterIntentionsContent: some View {
         VStack(spacing: 24) {
-            Text("What could you work on?")
+            Text("What could you do?")
                 .font(.system(size: 28, weight: .light))
                 .foregroundColor(.white)
 
-            Text("Enter at least 2 options (up to 6)")
+            Text("Enter at least 2 intentions (up to 6)")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.5))
 
@@ -272,7 +272,7 @@ struct IntentionPromptView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle")
-                        Text("Add another option")
+                        Text("Add another intention")
                     }
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.6))
