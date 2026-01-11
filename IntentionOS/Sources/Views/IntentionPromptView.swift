@@ -3,8 +3,13 @@ import SwiftUI
 // Entry for each intention with its weight
 struct IntentionEntry: Identifiable {
     let id = UUID()
-    var text: String = ""
-    var pips: Int = 1  // Weight for random selection (1-5)
+    var text: String
+    var pips: Int
+
+    init(text: String = "", pips: Int = 1) {
+        self.text = text
+        self.pips = pips
+    }
 }
 
 struct IntentionPromptView: View {
@@ -41,6 +46,9 @@ struct IntentionPromptView: View {
     @State private var ripples: [RippleState] = []
     @State private var ambientPhase: Double = 0
     @State private var rainTimer: Timer?
+
+    // Intention history
+    @State private var intentionHistory: [IntentionHistoryItem] = []
 
     // Computed properties for validation
     private var validIntentions: [IntentionEntry] {
@@ -131,6 +139,7 @@ struct IntentionPromptView: View {
         .onAppear {
             viewModel.loadBundles()
             startAnimations()
+            loadIntentionHistory()
             // Don't start countdown until configuring phase
         }
         .onDisappear {
@@ -241,61 +250,125 @@ struct IntentionPromptView: View {
     // MARK: - Phase 1: Enter Multiple Intentions
 
     private var enterIntentionsContent: some View {
-        VStack(spacing: 24) {
-            Text("What could you do?")
-                .font(.system(size: 28, weight: .light))
-                .foregroundColor(.white)
-
-            Text("Enter at least 2 intentions (up to 6)")
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.5))
-
-            // Intention text fields
-            VStack(spacing: 12) {
-                ForEach(intentions.indices, id: \.self) { idx in
-                    IntentionInputRow(
-                        index: idx,
-                        text: $intentions[idx].text,
-                        canRemove: intentions.count > 2,
-                        onRemove: { removeIntention(at: idx) }
-                    )
-                }
+        HStack(alignment: .top, spacing: 0) {
+            // History sidebar on the left
+            if !intentionHistory.isEmpty {
+                intentionHistorySidebar
+                    .frame(width: 220)
+                    .padding(.trailing, 40)
             }
-            .frame(maxWidth: 500)
 
-            // Add more button (if less than 6)
-            if intentions.count < 6 {
+            // Main content
+            VStack(spacing: 24) {
+                Text("What could you do?")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundColor(.white)
+
+                Text("Enter at least 2 intentions (up to 6)")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.5))
+
+                // Intention text fields
+                VStack(spacing: 12) {
+                    ForEach(intentions.indices, id: \.self) { idx in
+                        IntentionInputRow(
+                            index: idx,
+                            text: $intentions[idx].text,
+                            canRemove: intentions.count > 2,
+                            onRemove: { removeIntention(at: idx) }
+                        )
+                    }
+                }
+                .frame(maxWidth: 500)
+
+                // Add more button (if less than 6)
+                if intentions.count < 6 {
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            intentions.append(IntentionEntry())
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle")
+                            Text("Add another intention")
+                        }
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Continue button
                 Button(action: {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        intentions.append(IntentionEntry())
+                    saveEnteredIntentions()
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        flowPhase = .selectingIntention
                     }
                 }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus.circle")
-                        Text("Add another intention")
-                    }
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                    Text("Continue")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(canProceedToSelection ? .black : .gray)
+                        .frame(width: 200, height: 50)
+                        .background(canProceedToSelection ? Color.white : Color.white.opacity(0.5))
+                        .cornerRadius(25)
                 }
                 .buttonStyle(.plain)
+                .disabled(!canProceedToSelection)
+                .padding(.top, 16)
             }
 
-            // Continue button
-            Button(action: {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    flowPhase = .selectingIntention
-                }
-            }) {
-                Text("Continue")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(canProceedToSelection ? .black : .gray)
-                    .frame(width: 200, height: 50)
-                    .background(canProceedToSelection ? Color.white : Color.white.opacity(0.5))
-                    .cornerRadius(25)
+            // Spacer to balance the sidebar
+            if !intentionHistory.isEmpty {
+                Spacer()
+                    .frame(width: 220)
             }
-            .buttonStyle(.plain)
-            .disabled(!canProceedToSelection)
-            .padding(.top, 16)
+        }
+    }
+
+    // MARK: - Intention History Sidebar
+
+    private var intentionHistorySidebar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.4))
+                .padding(.leading, 4)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(intentionHistory) { item in
+                        Button(action: {
+                            addHistoricalIntention(item.text)
+                        }) {
+                            HStack(spacing: 8) {
+                                // Selection indicator
+                                if item.timesSelected > 0 {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.3))
+                                        .frame(width: 4, height: 4)
+                                } else {
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                        .frame(width: 4, height: 4)
+                                }
+
+                                Text(item.text)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white.opacity(0.35))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 8)
+                            .background(Color.white.opacity(0.001)) // Hit target
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 400)
         }
     }
 
@@ -370,6 +443,9 @@ struct IntentionPromptView: View {
         guard let index = index else { return }
         selectedIntentionIndex = index
         finalIntentionText = intentions[index].text
+
+        // Record the selection
+        DatabaseManager.shared.recordIntentionSelected(finalIntentionText)
 
         // Brief delay to show selection, then proceed
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -515,6 +591,40 @@ struct IntentionPromptView: View {
     private func removeIntention(at index: Int) {
         withAnimation(.easeOut(duration: 0.2)) {
             _ = intentions.remove(at: index)
+        }
+    }
+
+    private func loadIntentionHistory() {
+        intentionHistory = DatabaseManager.shared.getIntentionHistory(limit: 100)
+    }
+
+    private func saveEnteredIntentions() {
+        // Record all non-empty intentions to history
+        for intention in intentions {
+            let trimmed = intention.text.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                DatabaseManager.shared.recordIntentionEntered(trimmed)
+            }
+        }
+        // Reload history to reflect changes
+        loadIntentionHistory()
+    }
+
+    private func addHistoricalIntention(_ text: String) {
+        // Check if we already have this text
+        let exists = intentions.contains { $0.text.trimmingCharacters(in: .whitespaces) == text }
+        if exists { return }
+
+        // Add to list if under limit
+        if intentions.count < 6 {
+            withAnimation(.easeOut(duration: 0.2)) {
+                intentions.append(IntentionEntry(text: text, pips: 1))
+            }
+        } else {
+            // Find first empty slot or replace last
+            if let emptyIndex = intentions.firstIndex(where: { $0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                intentions[emptyIndex].text = text
+            }
         }
     }
 
