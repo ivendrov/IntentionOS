@@ -101,8 +101,8 @@ struct IntentionPromptView: View {
                 RippleBackground(ripples: ripples, ambientPhase: ambientPhase, geometry: geometry)
                     .edgesIgnoringSafeArea(.all)
 
-                // Edge progress ring during countdown
-                if countdownActive {
+                // Edge progress ring during countdown (only in entering phase)
+                if countdownActive && flowPhase == .enteringIntentions {
                     EdgeProgressRing(progress: 1.0 - (countdownRemaining / 10.0), geometry: geometry)
                 }
 
@@ -140,7 +140,7 @@ struct IntentionPromptView: View {
             viewModel.loadBundles()
             startAnimations()
             loadIntentionHistory()
-            // Don't start countdown until configuring phase
+            startCountdown()  // Start mindful pause immediately
         }
         .onDisappear {
             stopAnimations()
@@ -298,7 +298,7 @@ struct IntentionPromptView: View {
                     .buttonStyle(.plain)
                 }
 
-                // Continue button
+                // Continue button - disabled during countdown or if not enough intentions
                 Button(action: {
                     saveEnteredIntentions()
                     withAnimation(.easeOut(duration: 0.3)) {
@@ -307,13 +307,13 @@ struct IntentionPromptView: View {
                 }) {
                     Text("Continue")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(canProceedToSelection ? .black : .gray)
+                        .foregroundColor(canProceedToSelection && !countdownActive ? .black : .gray)
                         .frame(width: 200, height: 50)
-                        .background(canProceedToSelection ? Color.white : Color.white.opacity(0.5))
+                        .background(canProceedToSelection && !countdownActive ? Color.white : Color.white.opacity(0.5))
                         .cornerRadius(25)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canProceedToSelection)
+                .disabled(!canProceedToSelection || countdownActive)
                 .padding(.top, 16)
             }
 
@@ -451,7 +451,6 @@ struct IntentionPromptView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             withAnimation(.easeOut(duration: 0.3)) {
                 flowPhase = .configuringDetails
-                startCountdown()
             }
         }
     }
@@ -556,13 +555,12 @@ struct IntentionPromptView: View {
             Button(action: startIntention) {
                 Text("Begin")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(countdownActive ? .gray : .black)
+                    .foregroundColor(.black)
                     .frame(width: 200, height: 50)
-                    .background(countdownActive ? Color.white.opacity(0.5) : Color.white)
+                    .background(Color.white)
                     .cornerRadius(25)
             }
             .buttonStyle(.plain)
-            .disabled(countdownActive)
             .padding(.top, 8)
 
             // Back button
@@ -570,7 +568,6 @@ struct IntentionPromptView: View {
                 withAnimation(.easeOut(duration: 0.3)) {
                     flowPhase = .selectingIntention
                     selectedIntentionIndex = nil
-                    stopCountdown()
                 }
             }) {
                 Text("← Back")
@@ -579,13 +576,6 @@ struct IntentionPromptView: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    private func stopCountdown() {
-        countdownTimer?.invalidate()
-        countdownTimer = nil
-        countdownRemaining = 10.0
-        countdownActive = true
     }
 
     private func removeIntention(at index: Int) {
