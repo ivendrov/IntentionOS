@@ -122,9 +122,19 @@ class DatabaseManager {
             created_at REAL NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS intention_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL UNIQUE,
+            times_entered INTEGER DEFAULT 1,
+            times_selected INTEGER DEFAULT 0,
+            first_entered_at REAL NOT NULL,
+            last_used_at REAL NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_intentions_started_at ON intentions(started_at);
         CREATE INDEX IF NOT EXISTS idx_access_log_intention_id ON access_log(intention_id);
         CREATE INDEX IF NOT EXISTS idx_learned_rules_type_identifier ON learned_rules(type, identifier);
+        CREATE INDEX IF NOT EXISTS idx_intention_history_last_used ON intention_history(last_used_at DESC);
         """
 
         var errMsg: UnsafeMutablePointer<CChar>?
@@ -592,9 +602,116 @@ class DatabaseManager {
         )
     }
 
+    // MARK: - Intention History
+
+    /// Record that an intention text was entered (may or may not be selected)
+    func recordIntentionEntered(_ text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmedText.isEmpty else { return }
+
+        let now = Date().timeIntervalSince1970
+
+        // Try to update existing record first
+        let updateSql = """
+        UPDATE intention_history
+        SET times_entered = times_entered + 1, last_used_at = ?
+        WHERE text = ?
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, updateSql, -1, &stmt, nil) == SQLITE_OK else { return }
+
+        sqlite3_bind_double(stmt, 1, now)
+        sqlite3_bind_text(stmt, 2, trimmedText, -1, SQLITE_TRANSIENT)
+
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // If no row was updated, insert new
+        if sqlite3_changes(db) == 0 {
+            let insertSql = """
+            INSERT INTO intention_history (text, times_entered, times_selected, first_entered_at, last_used_at)
+            VALUES (?, 1, 0, ?, ?)
+            """
+
+            guard sqlite3_prepare_v2(db, insertSql, -1, &stmt, nil) == SQLITE_OK else { return }
+
+            sqlite3_bind_text(stmt, 1, trimmedText, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_double(stmt, 2, now)
+            sqlite3_bind_double(stmt, 3, now)
+
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
+    }
+
+    /// Record that an intention was selected (chosen to work on)
+    func recordIntentionSelected(_ text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmedText.isEmpty else { return }
+
+        let now = Date().timeIntervalSince1970
+
+        let sql = """
+        UPDATE intention_history
+        SET times_selected = times_selected + 1, last_used_at = ?
+        WHERE text = ?
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_double(stmt, 1, now)
+        sqlite3_bind_text(stmt, 2, trimmedText, -1, SQLITE_TRANSIENT)
+
+        sqlite3_step(stmt)
+    }
+
+    /// Get recent intention history, ordered by last used
+    func getIntentionHistory(limit: Int = 100) -> [IntentionHistoryItem] {
+        let sql = """
+        SELECT id, text, times_entered, times_selected, first_entered_at, last_used_at
+        FROM intention_history
+        ORDER BY last_used_at DESC
+        LIMIT ?
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_int(stmt, 1, Int32(limit))
+
+        var items: [IntentionHistoryItem] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let item = IntentionHistoryItem(
+                id: sqlite3_column_int64(stmt, 0),
+                text: String(cString: sqlite3_column_text(stmt, 1)),
+                timesEntered: Int(sqlite3_column_int(stmt, 2)),
+                timesSelected: Int(sqlite3_column_int(stmt, 3)),
+                firstEnteredAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
+                lastUsedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+            )
+            items.append(item)
+        }
+
+        return items
+    }
+
     deinit {
         sqlite3_close(db)
     }
+}
+
+/// Model for intention history items
+struct IntentionHistoryItem: Identifiable {
+    let id: Int64
+    let text: String
+    let timesEntered: Int
+    let timesSelected: Int
+    let firstEnteredAt: Date
+    let lastUsedAt: Date
 }
 
 // MARK: - SQLite Helpers

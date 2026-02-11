@@ -111,9 +111,40 @@ class IntentionManager: ObservableObject {
             if let appDelegate = AppDelegate.shared {
                 print("DEBUG: Got AppDelegate, closing windows")
                 appDelegate.closeIntentionWindows()
+
+                // Open Obsidian (journal) to start fresh
+                // This prevents seeing a disallowed app that might distract
+                self.openJournalApp()
             } else {
                 print("DEBUG: Failed to get AppDelegate.shared")
             }
+        }
+    }
+
+    /// Opens the journal app (Obsidian) when starting a new intention
+    private func openJournalApp() {
+        let obsidianBundleId = "md.obsidian"
+
+        // Try to find and activate Obsidian
+        if let obsidianApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == obsidianBundleId }) {
+            // Obsidian is already running, just activate it
+            obsidianApp.activate(options: [.activateIgnoringOtherApps])
+        } else {
+            // Try to launch Obsidian
+            if let obsidianURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: obsidianBundleId) {
+                NSWorkspace.shared.openApplication(at: obsidianURL, configuration: NSWorkspace.OpenConfiguration()) { app, error in
+                    if let error = error {
+                        print("DEBUG: Failed to open Obsidian: \(error)")
+                    }
+                }
+            } else {
+                print("DEBUG: Obsidian not found")
+            }
+        }
+
+        // Track Obsidian as the last allowed app
+        if let appDelegate = AppDelegate.shared {
+            appDelegate.lastAllowedAppBundleId = obsidianBundleId
         }
     }
 
