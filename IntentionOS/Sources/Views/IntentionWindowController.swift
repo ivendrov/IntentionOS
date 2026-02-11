@@ -61,7 +61,9 @@ class IntentionWindowController: NSWindowController {
     }
 
     private func startFocusReassertionTimer() {
-        let delay = TimeInterval(ConfigManager.shared.appConfig.reassertFocusDelayMs) / 1000.0
+        // Use a reasonable interval — 1 second is enough to catch focus loss
+        // without interfering with text input or fighting sibling windows.
+        let delay = max(1.0, TimeInterval(ConfigManager.shared.appConfig.reassertFocusDelayMs) / 1000.0)
 
         focusTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: true) { [weak self] _ in
             guard let window = self?.window, window.isVisible else {
@@ -69,9 +71,12 @@ class IntentionWindowController: NSWindowController {
                 return
             }
 
-            if !window.isKeyWindow {
-                window.makeKeyAndOrderFront(nil)
+            // Only reassert if the entire app lost focus (user switched apps).
+            // Don't check isKeyWindow — on multi-monitor setups only one window
+            // can be key at a time, and sibling windows would fight each other.
+            if !NSApp.isActive {
                 NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
             }
         }
     }

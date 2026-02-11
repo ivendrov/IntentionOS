@@ -200,7 +200,7 @@ class BreakGlassWindowController: NSWindowController {
     }
 
     private func startFocusReassertionTimer() {
-        let delay = TimeInterval(ConfigManager.shared.appConfig.reassertFocusDelayMs) / 1000.0
+        let delay = max(1.0, TimeInterval(ConfigManager.shared.appConfig.reassertFocusDelayMs) / 1000.0)
 
         focusTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: true) { [weak self] _ in
             guard let window = self?.window, window.isVisible else {
@@ -208,9 +208,9 @@ class BreakGlassWindowController: NSWindowController {
                 return
             }
 
-            if !window.isKeyWindow {
-                window.makeKeyAndOrderFront(nil)
+            if !NSApp.isActive {
                 NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
             }
         }
     }

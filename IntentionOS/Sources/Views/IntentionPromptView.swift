@@ -17,7 +17,7 @@ struct IntentionPromptView: View {
     @StateObject private var viewModel = IntentionPromptViewModel()
 
     // Multiple intentions flow
-    @State private var intentions: [IntentionEntry] = [IntentionEntry(), IntentionEntry()]
+    @State private var intentions: [IntentionEntry] = [IntentionEntry()]
     @State private var flowPhase: FlowPhase = .enteringIntentions
     @State private var selectedIntentionIndex: Int? = nil
     @State private var finalIntentionText: String = ""
@@ -44,7 +44,6 @@ struct IntentionPromptView: View {
 
     // Animation states - ripples like light rain
     @State private var ripples: [RippleState] = []
-    @State private var ambientPhase: Double = 0
     @State private var rainTimer: Timer?
 
     // Intention history
@@ -56,7 +55,7 @@ struct IntentionPromptView: View {
     }
 
     private var canProceedToSelection: Bool {
-        validIntentions.count >= 2
+        validIntentions.count >= 1
     }
 
     enum DurationOption: CaseIterable {
@@ -98,7 +97,7 @@ struct IntentionPromptView: View {
         GeometryReader { geometry in
             ZStack {
                 // Background with top-down water ripples (light rain effect)
-                RippleBackground(ripples: ripples, ambientPhase: ambientPhase, geometry: geometry)
+                RippleBackground(ripples: ripples, geometry: geometry)
                     .edgesIgnoringSafeArea(.all)
 
                 // Edge progress ring during countdown (only in entering phase)
@@ -160,11 +159,6 @@ struct IntentionPromptView: View {
     // MARK: - Animation Control
 
     private func startAnimations() {
-        // Ambient phase for background movement
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            ambientPhase += 0.008
-        }
-
         // Rain effect - add random ripples periodically
         rainTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { _ in
             addRainRipple()
@@ -264,7 +258,7 @@ struct IntentionPromptView: View {
                     .font(.system(size: 28, weight: .light))
                     .foregroundColor(.white)
 
-                Text("Enter at least 2 intentions (up to 6)")
+                Text("Enter your intentions (up to 6)")
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.5))
 
@@ -274,7 +268,7 @@ struct IntentionPromptView: View {
                         IntentionInputRow(
                             index: idx,
                             text: $intentions[idx].text,
-                            canRemove: intentions.count > 2,
+                            canRemove: intentions.count > 1,
                             onRemove: { removeIntention(at: idx) }
                         )
                     }
@@ -301,8 +295,17 @@ struct IntentionPromptView: View {
                 // Continue button - disabled during countdown or if not enough intentions
                 Button(action: {
                     saveEnteredIntentions()
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        flowPhase = .selectingIntention
+                    if validIntentions.count == 1 {
+                        // Skip selection phase — go straight to details
+                        finalIntentionText = validIntentions[0].text
+                        DatabaseManager.shared.recordIntentionSelected(finalIntentionText)
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            flowPhase = .configuringDetails
+                        }
+                    } else {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            flowPhase = .selectingIntention
+                        }
                     }
                 }) {
                     Text("Continue")
@@ -1044,7 +1047,6 @@ struct RippleState: Identifiable {
 
 struct RippleBackground: View {
     let ripples: [RippleState]
-    let ambientPhase: Double
     let geometry: GeometryProxy
 
     var body: some View {
