@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var accessibilityMonitor: AccessibilityMonitor?
     var wakeObserver: NSObjectProtocol?
     var loginObserver: NSObjectProtocol?
+    var screenChangeObserver: NSObjectProtocol?
 
     // Track last allowed app for "Go Back" functionality
     var lastAllowedAppBundleId: String?
@@ -114,6 +115,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let observer = loginObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
         }
+        if let observer = screenChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     // MARK: - Accessibility
@@ -146,6 +150,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             self?.handleScreenUnlock()
         }
+
+        // Screen configuration changes (monitor connected/disconnected)
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleScreenChange()
+        }
+    }
+
+    private func handleScreenChange() {
+        // If the intention prompt is showing, recreate windows to cover all screens
+        if !intentionWindowControllers.isEmpty {
+            showIntentionPrompt()
+        }
+        // Same for break-glass windows
+        if !breakGlassWindowControllers.isEmpty {
+            // Re-show with existing parameters isn't straightforward,
+            // but at minimum ensure the existing windows cover their screens
+            for controller in breakGlassWindowControllers {
+                if let window = controller.window, let screen = window.screen {
+                    window.setFrame(screen.frame, display: true)
+                }
+            }
+        }
     }
 
     private func handleSystemWake() {
@@ -153,6 +183,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if IntentionManager.shared.currentIntention != nil {
             IntentionManager.shared.endIntention(reason: .newIntention)
         }
+        // Show immediately on the primary display, then the screen change
+        // observer will pick up any external displays that appear shortly after.
         showIntentionPrompt()
     }
 
